@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">Country Currency API architecture</title>
+  <desc id="desc">Client requests pass through an Express REST API to country CRUD operations and MySQL. Refresh fetches countries and exchange rates from external APIs and upserts records into the database.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/></marker></defs>
+  <rect width="1200" height="700" fill="#f1f5f9"/>
+  <text x="600" y="52" text-anchor="middle" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0f172a">Country Currency &amp; Exchange API</text>
+  <text x="600" y="82" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" fill="#475569">REST endpoints, persistent country records, and refresh pipeline</text>
+  <g font-family="Arial,sans-serif" text-anchor="middle">
+    <rect x="65" y="220" width="205" height="125" rx="16" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="168" y="268" font-size="22" font-weight="700" fill="#1e3a8a">Client</text><text x="168" y="300" font-size="15" fill="#1e40af">HTTP requests / JSON</text>
+    <rect x="365" y="220" width="230" height="125" rx="16" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/><text x="480" y="268" font-size="22" font-weight="700" fill="#14532d">Express REST API</text><text x="480" y="300" font-size="15" fill="#166534">Validation · routes · errors</text>
+    <rect x="825" y="220" width="285" height="125" rx="16" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/><text x="967" y="268" font-size="22" font-weight="700" fill="#4c1d95">MySQL Database</text><text x="967" y="300" font-size="15" fill="#5b21b6">countries · app_status</text>
+    <rect x="355" y="475" width="260" height="105" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="2"/><text x="485" y="516" font-size="19" font-weight="700" fill="#9a3412">REST Countries API</text><text x="485" y="545" font-size="14" fill="#9a3412">country details + currencies</text>
+    <rect x="705" y="475" width="260" height="105" rx="14" fill="#fff7ed" stroke="#f97316" stroke-width="2"/><text x="835" y="516" font-size="19" font-weight="700" fill="#9a3412">Exchange Rate API</text><text x="835" y="545" font-size="14" fill="#9a3412">USD-based currency rates</text>
+    <text x="480" y="169" font-size="16" font-weight="700" fill="#334155">CRUD + refresh endpoints</text>
+    <text x="967" y="169" font-size="16" font-weight="700" fill="#334155">Read · create · update · delete</text>
+  </g>
+  <g fill="none" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M270 282 H355"/><path d="M595 282 H815"/><path d="M815 320 H605"/>
+    <path d="M480 345 V463"/><path d="M570 345 Q740 400 835 463"/>
+    <path d="M615 527 Q710 410 880 345"/>
+  </g>
+  <rect x="280" y="620" width="640" height="45" rx="10" fill="#e2e8f0"/>
+  <text x="600" y="649" text-anchor="middle" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#334155">Refresh flow: fetch → validate → map currency rates → upsert → report result</text>
+</svg>
