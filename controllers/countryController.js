@@ -16,6 +16,13 @@ const SORT_OPTIONS = {
 };
 
 function sendError(res, error) {
+    if (error.code === "REST_COUNTRIES_API_KEY_MISSING") {
+        return res.status(500).json({
+            error: "Configuration error",
+            details: error.message
+        });
+    }
+
     if (error.statusCode === 400) {
         return res.status(400).json({
             error: "Validation failed",

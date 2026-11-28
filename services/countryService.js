@@ -1,12 +1,20 @@
 const axios = require("axios");
 const db = require("../config/db");
 
-const COUNTRIES_URL = "https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies";
+const COUNTRIES_URL = "https://api.restcountries.com/countries/v5";
+const COUNTRIES_PAGE_SIZE = 100;
 const EXCHANGE_RATES_URL = "https://open.er-api.com/v6/latest/{CURRENCY_CODE}";
 
 function externalError() {
     const error = new Error("External data source unavailable");
     error.statusCode = 503;
+    return error;
+}
+
+function apiKeyError() {
+    const error = new Error("Missing required REST Countries configuration: REST_COUNTRIES_API_KEY");
+    error.code = "REST_COUNTRIES_API_KEY_MISSING";
+    error.statusCode = 500;
     return error;
 }
 
@@ -22,26 +30,55 @@ function defaultMultiplier() {
 }
 
 function extractCurrency(currencies) {
-    if (!Array.isArray(currencies) || currencies.length === 0) {
-        return {
-            currency_code: null,
-            allowNullCurrency: true
-        };
+    if (currencies === undefined || currencies === null) {
+        return { currency_code: null, allowNullCurrency: true };
+    }
+    if (!Array.isArray(currencies)) {
+        return { currency_code: null, allowNullCurrency: false };
+    }
+    if (currencies.length === 0) {
+        return { currency_code: null, allowNullCurrency: true };
     }
 
-    const code = currencies[0] && currencies[0].code;
+    const firstValid = currencies.find((currency) =>
+        typeof currency?.code === "string" && /^[A-Za-z]{3}$/.test(currency.code.trim())
+    );
+    if (!firstValid) return { currency_code: null, allowNullCurrency: false };
+    return { currency_code: firstValid.code.trim(), allowNullCurrency: true };
+}
 
-    if (typeof code !== "string" || code.trim() === "") {
-        return {
-            currency_code: null,
-            allowNullCurrency: false
-        };
-    }
-
+function mapCountry(country) {
+    const capitals = Array.isArray(country?.capitals) ? country.capitals : [];
+    const validCapitals = capitals.filter((capital) => typeof capital?.name === "string" && capital.name.trim());
+    const capital = validCapitals.find((item) => item.attributes?.primary === true) || validCapitals[0];
+    const flag = country?.flag || {};
     return {
-        currency_code: code.trim(),
-        allowNullCurrency: true
+        name: country?.names?.common,
+        capital: capital?.name || null,
+        region: country?.region ?? null,
+        population: country?.population,
+        currencies: country?.currencies,
+        flag: typeof flag.url_svg === "string" && flag.url_svg.trim()
+            ? flag.url_svg
+            : typeof flag.url_png === "string" && flag.url_png.trim() ? flag.url_png : null
     };
+}
+
+function readCountryPage(response, expectedOffset) {
+    const data = response?.data?.data;
+    const objects = data?.objects;
+    const meta = data?.meta;
+    if (data?._demo || !Array.isArray(objects) || !objects.length || !meta ||
+        !Number.isInteger(meta.total) || meta.total < 1 ||
+        !Number.isInteger(meta.count) || meta.count !== objects.length ||
+        !Number.isInteger(meta.limit) || meta.limit < 1 || meta.limit > COUNTRIES_PAGE_SIZE ||
+        !Number.isInteger(meta.offset) || meta.offset !== expectedOffset ||
+        typeof meta.more !== "boolean" || objects.length > meta.limit ||
+        expectedOffset + objects.length > meta.total ||
+        meta.more !== (expectedOffset + objects.length < meta.total)) {
+        throw externalError();
+    }
+    return { objects, meta };
 }
 
 function buildCountryRecords(countries, rates, randomMultiplier = defaultMultiplier) {
@@ -109,48 +146,55 @@ function validateCountryRecords(records) {
     return null;
 }
 
-function isCountryList(data) {
-    return Array.isArray(data);
-}
-
 async function fetchExternalData() {
-    let countriesResponse;
-    try {
-        countriesResponse = await axios.get(COUNTRIES_URL, { timeout: 20000 });
-    } catch (error) {
-        console.error("External data request failed:", {
-            service: "REST Countries",
-            status: error.response?.status ?? null,
-            code: error.code ?? null
-        });
-        throw externalError();
-    }
+    const apiKey = process.env.REST_COUNTRIES_API_KEY;
+    if (typeof apiKey !== "string" || !apiKey.trim()) throw apiKeyError();
 
-    const countries = countriesResponse.data;
-    const deprecatedApiResponse = countries &&
-        !Array.isArray(countries) &&
-        countries.success === false &&
-        countries.data === null &&
-        Array.isArray(countries.errors) &&
-        countries.errors.some((item) => typeof item?.message === "string" && /deprecated/i.test(item.message));
+    const countries = [];
+    const seenPages = new Set();
+    let offset = 0;
+    let expectedTotal;
+    while (true) {
+        let response;
+        try {
+            response = await axios.get(COUNTRIES_URL, {
+                timeout: 20000,
+                headers: { Authorization: `Bearer ${apiKey.trim()}` },
+                params: { limit: COUNTRIES_PAGE_SIZE, offset }
+            });
+        } catch (error) {
+            console.error("External data request failed:", {
+                service: "REST Countries",
+                status: error.response?.status ?? null,
+                code: error.code ?? null
+            });
+            throw externalError();
+        }
 
-    if (deprecatedApiResponse) {
-        console.error("External data response rejected:", {
-            service: "REST Countries",
-            status: countriesResponse.status ?? null,
-            code: "API_VERSION_DEPRECATED"
-        });
-        throw externalError();
+        let page;
+        try {
+            page = readCountryPage(response, offset);
+        } catch (error) {
+            console.error("External data response invalid:", {
+                service: "REST Countries",
+                status: response?.status ?? null,
+                code: "INVALID_OR_INCOMPLETE_RESPONSE"
+            });
+            throw externalError();
+        }
+        if (expectedTotal !== undefined && page.meta.total !== expectedTotal) throw externalError();
+        expectedTotal = page.meta.total;
+        const fingerprint = JSON.stringify(page.objects);
+        if (seenPages.has(fingerprint)) throw externalError();
+        seenPages.add(fingerprint);
+        countries.push(...page.objects.map(mapCountry));
+        offset += page.objects.length;
+        if (!page.meta.more) break;
+        if (offset >= expectedTotal || seenPages.size > expectedTotal) {
+            throw externalError();
+        }
     }
-
-    if (!isCountryList(countries)) {
-        console.error("External data response invalid:", {
-            service: "REST Countries",
-            status: countriesResponse.status ?? null,
-            code: "INVALID_RESPONSE"
-        });
-        throw externalError();
-    }
+    if (countries.length !== expectedTotal) throw externalError();
 
     const currencyCodes = [...new Set(countries.flatMap((country) => {
         const { currency_code: code } = extractCurrency(country.currencies);
@@ -324,6 +368,7 @@ module.exports = {
     COUNTRIES_URL,
     EXCHANGE_RATES_URL,
     fetchExternalData,
+    mapCountry,
     buildCountryRecords,
     validateCountryRecords,
     refreshCountries,

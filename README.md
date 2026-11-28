@@ -22,6 +22,7 @@ DB_USER=your_mysql_user
 DB_PASSWORD=your_mysql_password
 DB_NAME=country_currency
 DB_PORT=3306
+REST_COUNTRIES_API_KEY=your_api_key_here
 # Optional; set true only if your database endpoint requires TLS
 DB_SSL=false
 ```
@@ -106,7 +107,7 @@ Returns the updated row. `DELETE /countries/Exampleland` returns `{"message":"Co
 
 ### Refresh
 
-`POST /countries/refresh` retrieves `name,capital,region,population,flag,currencies` from `https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies`. It requests exchange data for each currency at `https://open.er-api.com/v6/latest/{CURRENCY_CODE}`. Countries without a currency or a rate are retained with null currency/rate fields. Rows are inserted or updated by country name; refresh never deletes rows. External failures return `503`, and database failures return `500`.
+`POST /countries/refresh` retrieves the complete country dataset from the authenticated REST Countries v5 endpoint, requesting pages of up to 100 records until pagination metadata reports the final page. Set `REST_COUNTRIES_API_KEY` in `.env`; the key is sent as a bearer token and must not be committed. Country name, capital, region, population, currencies, and flag URLs are mapped into the API's existing country fields. When multiple currency entries are present, the first valid three-letter currency code is selected; capitals marked primary take precedence, otherwise the first valid capital is used. The API requests exchange data for each currency at `https://open.er-api.com/v6/latest/{CURRENCY_CODE}`. Countries without a currency or a rate are retained with null currency/rate fields. Rows are inserted or updated by country name; refresh never deletes rows. External failures return `503`, and database failures return `500`.
 
 Successful refresh response:
 
